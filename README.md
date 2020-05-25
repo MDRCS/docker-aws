@@ -169,3 +169,121 @@
 
     # Remove a Node
     $ docker node rm ip-172-30-5-108.ec2.internal
+
+
+### - Using Docker for AWS to Create a Multi-Zone Swarm :
+
+    The Problem
+    By default, a Docker Swarm is provisioned on a single zone on AWS, as illustrated in Figure 3-1. With the manager
+    nodes and all the worker nodes in the same AWS zone, failure of the zone would make the zone unavailable.
+    A single-zone Swarm is not a highly available Swarm and has no fault tolerance.
+
+![](./static/single-zone-swarm.png)
+
+    The Solution
+    Docker and AWS have partnered to create a Docker for AWS deployment platform that provisions a Docker
+    Swarm across multiple zones on AWS. Docker for AWS does not require users to run any commands on a command
+    line and is graphical user interface (GUI) based. With manager and worker nodes in multiple zones,
+    failure of a single AWS zone does not make the Swarm unavailable, as illustrated in Figure 3-2.
+    Docker for AWS provides fault tolerance to a Swarm.
+
+
+![](./static/multi-zone-swarm.png)
+
+    Docker for AWS has several other benefits:
+    • All the required infrastructure is provisioned automatically.
+    • Automatic upgrade to new software versions without service interruption.
+    • A custom Linux distribution optimized for Docker. The custom Linux distribution is not available separately on AWS and uses the overlay2 storage driver.
+    • Unused Docker resources are pruned automatically.
+    • Auto-scaling groups for managing nodes.
+    • Log rotation native to the host to avoid chatty logs consuming all the disk space.
+    • Centralized logging with AWS CloudWatch.
+    • A bug-reporting tool based on a docker-diagnose script.
+
+    + Two editions of Docker for Swarm are available:
+
+    • Docker Enterprise Edition (EE) for AWS
+    • Docker Community Edition (CE) for AWS
+
+    + We use the Docker Community Edition (CE) for AWS in this chapter to create a multi-zone Swarm.
+      This chapter includes the following topics:
+
+    • Setting the environment
+    • Creating a AWS CloudFormation stack for the Docker Swarm
+    • Connecting with the Swarm manager
+    • Using the Swarm
+    • Deleting the Swarm
+
+
+    # Use Docker CE template for CloudFormation to Launch the infrastructure :
+    $ http://editions-us-east-1.s3.amazonaws.com/aws/stable/18.03.0/Docker.tmpl
+
+    # go to cloudformation
+    # create template
+    # add this file in the amazon s3 field : http://editions-us-east-1.s3.amazonaws.com/aws/stable/18.03.0/Docker.tmpl
+
+![](./static/cloud_infrastructure.png)
+
+    $ Keep the default settings of 3 for Number of Swarm Managers and 5 for Number of Swarm Worker nodes.
+
+    - Enable daily resource cleanup? -> Cleans up unused images, containers, networks, and volumes. -> no
+    - Use Cloudwatch for container logging? -> Send all Container logs to CloudWatch
+    - Swarm manager instance type? -> t2.micro
+    - Manager ephemeral storage volume size? -> 20GB
+    - Manager ephemeral storage volume type? -> standard
+    - Set Rollback on Failure to Yes
+    - Wait for output to display info
+    -> click on docker-swarm-manager
+
+    - check load balancer
+    - check launch configuration
+
+
+    # connecting to swarm cluster - 3 Managers & 5 Workers :
+    $ ssh -i "swarm-cluster.pem" docker@3.89.37.51
+    $ docker node ls
+
+    $ docker service create \
+          --env MYSQL_ROOT_PASSWORD='mysql'\
+          --replicas 1 \
+          --name mysql \
+          --update-delay 10s \
+         --update-parallelism 1  \
+         mysql
+
+    $ docker service ls
+
+    # scale up docker container
+    $ docker service scale mysql=3
+
+    # scale down
+    $ docker service scale mysql=0
+
+    # check where each replicas is affected.
+
+    $ docker service ps mysql
+
+    # Updating the Placement Constraints
+
+    # if a replicas failed
+    $ docker service ps -f desired-state=running mysql
+
+    # if we want to run a container just in a worker node
+    $ docker service update --constraint-add  "node.role==worker" mysql
+
+    # or just a manager node
+    $ docker service update --constraint-add 'node.role==manager' mysql
+
+    # update mysql image by a postgres image
+    $ docker service update --image postgres mysql
+
+    # Updating resources
+    $ docker service update --limit-cpu 0.5  --limit-memory 1GB --reserve-cpu
+      "0.5"  --reserve-memory "1GB" mysql
+
+    # check changes
+    $ docker service inspect mysql
+
+### - Deleting a Swarm Stack
+
+![](./static/delete-stack.png)
