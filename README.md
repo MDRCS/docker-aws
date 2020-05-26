@@ -521,3 +521,125 @@
     # failing scaling to 10 replicas because of lack of resources.
 
 
+    + Scheduling :
+
+    - The Problem :
+      Without a scheduling policy, the service tasks could get scheduled on a subset of nodes in a Swarm.
+      As an example, all three tasks in a service could get scheduled on the same node in a Swarm.
+
+![](./static/scheduling_problem.png)
+
+    - Not using a scheduling policy could lead to the following problems:
+    • Underutilization of resources in a Swarm—If all the tasks are scheduled on a single node or a subset of nodes,
+      the resource capacity of the other nodes is not utilized.
+    • Unbalanced utilization of resources—If all the tasks are scheduled on a single node or a subset of nodes,
+      the resources on the nodes on which the tasks are scheduled are over-utilized and the tasks could even use up
+      all the resource capacity without any scope for scaling the replicas.
+    • Lack of locality—Clients access a service’s tasks based on node location. If all the service tasks are scheduled on a single node,
+      the external clients that are accessing the service on other nodes cannot access the service locally, thereby incurring a network overhead
+      in accessing a relatively remote task.
+    • Single point of failure—If all services are running on one node and that node has a problem, it results in downtime.
+      Increasing redundancy across nodes obviates that problem.
+
+
+
+    - The Solution - Spread Strategy Built-in scheduling in docker swarm :
+    To overcome the issues discussed in the preceding section, service task scheduling in a Docker Swarm is based on a built-in scheduling policy.
+    Docker Swarm mode uses the spread scheduling strategy to rank nodes for placement of a service task (replica). Node ranking is computed for scheduling
+    of each task and a task is scheduled on the node with the highest computed ranking. The spread scheduling strategy computes node rank based on the node's
+    available CPU, RAM, and the number of containers already running on the node. The spread strategy optimizes for the node with the least number of containers.
+    Load sharing is the objective of the spread strategy and results in tasks (containers) spread thinly and evenly over several machines in the Swarm.
+
+    The expected outcome of the spread strategy is that if a single node or a small subset of nodes go down or become available, only a few tasks are lost and a majority of tasks in the Swarm continue to be available.
+
+![](./static/spread_scheduling.png)
+
+    As a hypothetical example:
+    1. Start with three nodes, each with a capacity of 3GB and 3 CPUs and no containers running.
+
+    + scheduling optimization :
+
+        • Setting the environment
+        • Creating and scheduling a service—the spread scheduling
+        • Desired state reconciliation
+        • Scheduling tasks limited by node resource capacity
+        • Adding service scheduling constraints
+        • Scheduling on a specific node
+        • Adding multiple scheduling constraints
+        • Adding node labels for scheduling
+        • Adding, updating, and removing service scheduling constraints
+        • Spread scheduling and global services
+
+    $ docker service create \
+        --env MYSQL_ROOT_PASSWORD='mysql'\
+        --replicas 5 \
+        --name mysql \
+         mysql
+
+    $ docker service ls
+    $ docker service ps mysql
+
+
+### - Scheduling Constraints :
+
+![](./static/scheduling_constraints.png)
+
+    # scheduling a container in a specific node
+    #by kind worker | manager
+    $ docker service create \
+       --env MYSQL_ROOT_PASSWORD='mysql'\
+       --replicas 3 \
+       --constraint node.role==worker \
+       --name mysql \
+       mysql
+
+    $ docker service ps -f desired-state=running mysql
+
+    # By node_id
+    $ docker service create \
+      --env MYSQL_ROOT_PASSWORD='mysql'\
+      --replicas 3 \
+      --constraint  node.id ==<nodeid>
+      --name mysql \
+        mysql
+
+
+    # Multiple constraints
+    $ docker service create \
+        --env MYSQL_ROOT_PASSWORD='mysql'\
+        --replicas 3 \
+        --constraint node.role==worker \
+        --constraint   node.hostname!=ip-172-31-2-177.ec2.internal\
+        --name mysql \
+         mysql
+
+    # promote a node to manager
+    $ docker node promote ip-172-31-2-177.ec2.internal
+
+    # Adding Node Labels for Scheduling
+    $ docker node update --label-add <LABELKEY>=<LABELVALUE> <NODE>
+    $ docker node update --label-add db=mysql ip-172-31-25-121.ec2.internal
+
+    # scheduling a task by lable
+    $ docker service create \
+        --env MYSQL_ROOT_PASSWORD='mysql'\
+        --replicas 3 \
+        --constraint node.labels.db==mysql \
+        --name mysql \
+         mysql
+
+    # delete a label from a node
+    $ docker node update --label-rm  db  ip-172-31-25-121.ec2.internal
+
+
+    # Updating Constraints
+    $ docker service update \
+      --constraint-add node.role==manager \
+      mysql
+
+    $ docker service update \
+       --constraint-rm node.role==manager \
+       --constraint-add node.role==worker \
+       mysql
+
+    $ docker service update --constraint-rm node.role==worker mysql
