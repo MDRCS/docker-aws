@@ -287,3 +287,237 @@
 ### - Deleting a Swarm Stack
 
 ![](./static/delete-stack.png)
+
+
+### - Data Persistence - Using Mounts:
+
+    + A service task container in a Swarm has access to the filesystem inherited from its Docker image.
+      The data is made integral to a Docker container via its Docker image. At times,
+      a Docker container may need to store or access data on a persistent filesystem.
+      While a container has a filesystem, it is removed once the container exits.
+      In order to store data across container restarts, that data must be persisted
+      somewhere outside the container.
+
+    + The Problem :
+        Data stored only within a container could result in the following issues:
+        • The data is not persistent. The data is removed when a Docker container is stopped.
+        • The data cannot be shared with other Docker containers or with the host filesystem.
+
+
+    + The Solution :
+    Modular design based on the Single Responsibility Principle (SRP) recommends that data be decoupled from the Docker container.
+    Docker Swarm mode provides mounts for sharing data and making data persistent across a container startup and shutdown.
+    Docker Swarm mode provides two types of mounts for services:
+
+    • Volume mounts
+    • Bind mounts
+
+    + Volume mounts :
+
+    The default is the volume mount. A mount for a service is created using the --mount option of the
+    docker service createcommand.
+
+![](./static/volume-mounts.png)
+
+    Each container in the service has access to the same named volume on the host on which the container is running,
+    but the host named volume could store the same or different data.
+    When using volume mounts, contents are not replicated across the cluster. For example,
+    if you put something into the mysql-scripts directory you’re using, those new files will only
+    be accessible to other tasks running on that same node. Replicas running on other nodes will not have access to those files.
+
+
+    + Bind Mounts :
+
+![](./static/bind-mounts.png)
+
+    # Getting Started Volume for database accross swarm :
+
+    $ ssh -i "swarm-cluster.pem" ec2-user@3.235.222.47
+
+![](./static/volume-options.png)
+
+    $ docker volume create --name hello
+    $ docker volume ls
+    $ docker volume inspect hello
+
+    $ docker service create \
+       --name hello-world \
+       --mount src=hello,dst=/hello,volume-label="msg=hello",volume-label="msg2=world" \
+       --publish 8080:80 \
+       --replicas 2 \
+       tutum/hello-world
+
+    $ docker service ls
+    $ docker service inspect hello-world
+         "Mounts": [
+                        {
+                            "Type": "volume",
+                            "Source": "hello",
+                            "Target": "/hello",
+                            "VolumeOptions": {
+                                "Labels": {
+                                    "msg": "hello",
+                                    "msg2": "world"
+                                },
+                                "DriverConfig": {}
+
+    $ docker service create \
+           --name nginx-service \
+           --replicas 3 \
+           --mount type=volume,source="nginx-root", \
+           destination="/var/lib/nginx", \
+           volume-label="type=nginx root dir" \
+           nginx:alpine
+
+
+    $ docker volume ls
+
+    # removing a volume
+    $ docker volume rm
+
+    # Creating and Using a Bind Mount
+    In this section, we create a mount of type bind. Bind mounts are suitable if data in directories that already
+    exist on the host needs to be accessed from within Docker containers.
+
+
+     - The host source directory and the volume target must both be absolute paths. The host source directory
+       must exist prior to creating a service. The target directory within each Docker container of the service
+       is created automatically. Create a directory on the manager node and then add a file called createtable.sql to the directory.
+
+    $ sudo mkdir -p /etc/mysql/scripts
+    $ cd /etc/mysql/scripts
+    /etc/mysql/scripts $ sudo vi createtable.sql
+    $ docker service create \
+        --env MYSQL_ROOT_PASSWORD='mysql' \
+        --replicas 3 \
+        --mount type=bind,src="/etc/mysql/scripts",dst="/scripts" \
+        --name mysql \
+           mysql
+
+    $ docker ps
+    $ docker exec -it e71275e6c65c bash
+    $ ls -l
+      drwxr-xr-x.  2 root root 4096 Jul 24 20:44 scripts
+
+    $ cd /scripts
+    $ ls -l
+        createtable.sql
+
+
+    + Configuring resource | Resource Allocation :
+
+    - Problems :
+
+    Two issues can result if no resource configuration is specified in Docker Swarm mode.
+    Some of the service tasks could consume a disproportionate amount of resources, while the other service tasks
+    are not able to get scheduled due to lack of resources. As an example, consider a node
+    with resource capacity of 3GB and 3 CPUs. Without any resource guarantees and limits, one service
+    task container could consume most of the resources (2.8GB and 2.8 CPUs), while two other service task
+    containers each have only 0.1GB and 0.1 CPU of resources remaining to be used and do not get scheduled,
+
+![](./static/unequal_resource_distribution.png)
+
+    + The second issue that can result is that the resource capacity of a node can get fully used up without
+      any provision to schedule any more service tasks. As an example, a node with a resource capacity of 9GB
+      and 9 CPUs has three service task containers running, with each using 3GB and 3 CPUs,
+
+![](./static/full_consumption.png)
+
+    - Solution :
+    A resource limit is the maximum amount of a resource that a service task can use regardless of how much of a resource is available.
+
+![](./static/resources.png)
+
+
+![](./static/resources_reserve.png)
+
+    + And, if resource limits are implemented for service task containers, excess resources would be available to start
+      new service task containers. In the example discussed previously, a limit of 2GB and 2 CPUs per service
+      task would keep the excess resources of 3GB and 3 CPUs available for new service task containers
+
+    # Create Service Without Resource Specification :
+
+    $    docker service create \
+          --env MYSQL_ROOT_PASSWORD='mysql'\
+          --replicas 1 \
+          --name mysql \
+        mysql
+
+    $ docker service ls
+    $ docker service ps mysql
+    $ docker service inspect mysql
+    # Resources Spec are not defined (illimit)
+         "Resources": {
+                    "Limits": {},
+                    "Reservations": {}
+                },
+
+![](./static/resources_allocation.png)
+
+    $ docker service rm mysql
+
+    # create service with resource specification :
+    $ docker service create \
+        --env MYSQL_ROOT_PASSWORD='mysql'\
+        --replicas 1 \
+        --name mysql \
+      --reserve-cpu .25 --limit-cpu 1 --reserve-memory 128mb --limit-memory 256mb \
+       mysql
+
+    $ docker service inspect mysql
+        "Resources": {
+                    "Limits": {
+                        "NanoCPUs": 1000000000,
+                        "MemoryBytes": 268435456
+                    },
+                    "Reservations": {
+                        "NanoCPUs": 250000000,
+                        "MemoryBytes": 134217728
+                    }
+                }
+
+    # check node capacities :
+    $ docker node ls
+    $ docker node inspect ip-172-31-73-139.ec2.internal
+        "Resources": {
+                "NanoCPUs": 1000000000,
+                "MemoryBytes": 1031114752
+            }
+
+    # check where mysql service is running
+    $ docker service ps mysql
+
+    # scale up mysql container -> see which worker have which container/replicas
+
+    $ docker service scale mysql=5
+    $ docker service ps mysql
+
+    # Update resources for a service
+    $ docker service update --reserve-cpu 1 --limit-cpu 2 --reserve-memory 256mb
+
+    # Resource Usage and Node Capacity
+    $ docker service create \
+        --env MYSQL_ROOT_PASSWORD='mysql'\
+        --replicas 3 \
+        --name mysql \
+        --reserve-memory=4GB\
+        mysql
+
+    + pay attention to reseve memory to not exced node capacity
+    $ docker service ls
+
+    # Another case where we will launch 1 replica and scaling to 3 and failing to scale to 10 :
+    $ docker service create \
+        --env MYSQL_ROOT_PASSWORD='mysql'\
+        --replicas 1 \
+      --name mysql \
+      --reserve-cpu .5 --reserve-memory 512mb \
+       mysql
+
+    $ docker service ls
+    $ docker service scale mysql=3
+    $ docker service ps mysql
+    $ docker service scale mysql=10
+    # failing scaling to 10 replicas because of lack of resources.
+
+
