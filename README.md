@@ -784,3 +784,52 @@
          mysql
 
     - tool used is sematext.
+
+    + Load balancing
+
+    - Service Discovery
+    A Swarm has a DNS server embedded in it. Service discovery is based on the DNS name. Swarm manager assigns each service in the Swarm a unique DNS name entry. Swarm manager uses internal load balancing to distribute requests for the different services in the Swarm based on the DNS name for a service.
+
+    + The Problem :
+    Ingress load balancing is for distributing the load among the service tasks and is used even if a Swarm consists of a single node.
+    Ingress load balancing for a multi-node Swarm is illustrated in Figure 12-1. A client may access any node in the Swarm,
+    whether the node has a service task scheduled or not, and the client request is forwarded to one of the service tasks using ingress load balancing.
+
+    + A single node does not provide any fault tolerance. If the node fails, the service becomes unavailable to an external client accessing the service at the node.
+
+![](./static/ingress_load_balancing.png)
+
+    + The Solution :
+    An AWS Elastic Load Balancer (ELB) is used to distribute client load across multiple EC2 instances. When used for Docker Swarm mode an AWS Elastic Load Balancer distributes
+    client load across the different EC2 instances, which are hosting the Swarm nodes. The external load balancer accesses (listens to) the Swarm on each EC2 instance at the
+    published ports for the services running in the Swarm using LB listeners. Each LB listener has an LB port mapped to an instance port (a published port for a service) on each EC2 instance.
+
+- Elastic Load balancer aws :
+
+![](./static/external_load_balancer.png)
+
+    # External Load Balancing StepByStep :
+    $ docker service create \
+        --name hello-world \
+        --publish 8080:80 \
+        --replicas 3 \
+        tutum/hello-world
+
+    # run docker ps on Manager, Slave1, Slave2
+
+    1- To invoke the service at the manager node, obtain the public DNS of the Swarm manager instance from the EC2 console.
+    2- Creating an External Elastic Load Balancer on aws go to ec2 section search on load balancers on the left click create.
+    3- choose classic load-balancer
+    4- name it `helloworld_loadbalancer` .
+    5- keep the default parameters for http protocol.
+    6- select -> Enable advanced VPC configuration.
+    7- select at least 2 zones to ensure high-availibility
+    8- In the Assign Security Groups tab, select Create a New Security Group,
+       In Type, select Custom TCP Rule. Choose the TCP protocol and the port range as 8080.
+       Select Anywhere for the source and its value as 0.0.0.0/0.
+       Click on Next.
+
+    9- add EC2 Instances -> select all
+    10- go to description of load balancers and Obtain the DNS name of the load balancer.
+
+
