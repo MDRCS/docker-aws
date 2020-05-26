@@ -833,3 +833,8 @@
     10- go to description of load balancers and Obtain the DNS name of the load balancer.
 
 
+    # deploy a stack -> wordpress
+
+    docker stack deploy --compose-file docker-cloud.yml mysql
+
+
