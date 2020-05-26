@@ -643,3 +643,62 @@
        mysql
 
     $ docker service update --constraint-rm node.role==worker mysql
+
+    + Rolling Updates :
+
+    The Problem
+    Once a service definition has been created, it may be required to update some of the service options such as
+    increase/decrease the number of replicas, add/remove placement constraints, update resource reserves and
+    limits, add/remove mounts, add/remove environment variables, add/remove container and service labels,
+    add/remove DNS options, and modify restart and update parameters. If a service is required to be shut
+    down as a whole to update service definition options, an interruption of service is the result.
+
+![](./static/rolling_update_policy.png)
+
+
+    $ docker service create \
+        --env MYSQL_ROOT_PASSWORD='mysql'\
+        --replicas 1 \
+        --name mysql \
+        --update-delay 10s \
+        --update-parallelism 1 \ > mysql:5.6
+
+    # Update number of replicas
+    $ docker service update \
+        --replicas 5 \
+        --update-delay 20s \
+        --update-parallelism 1  \
+        mysql
+
+    # Update parallelism is set to 2 to update two replicas at a time.
+    $ docker service update --image mysql:latest --update-parallelism 2  mysql
+
+    # update environement variables :
+    $ docker service update --env-add MYSQL_DATABASE='mysqldb' --env-add MYSQL_USER='mysql' --env-add MYSQL_PASSWORD='mysql' --env-add MYSQL_ALLOW_EMPTY_PASSWORD='no' --update- parallelism 1 mysql
+
+    # check update status
+    $ docker service inspect mysql
+        "UpdateStatus": {
+            "State": "completed",
+            "StartedAt": "2017-07-25T19:18:11.44139778Z",
+            "CompletedAt": "2017-07-25T19:20:37.912993431Z",
+            "Message": "update completed"
+    }
+
+    # update delete
+    $ docker service update --env-rm MYSQL_DATABASE --env-rm MYSQL_USER --env-rm MYSQL_PASSWORD --env-rm MYSQL_ALLOW_EMPTY_PASSWORD mysql
+
+    + Rolling Update Failure Action :
+    - The --update-failure-action option of the docker service create and docker service update commands specifies the follow-up action to take if the update to a task fails and returns FAILED. We set the UpdateConfig for the mysql service to include a --update-failure-action of pause (the default). The other option setting is continue, which does not pause a rolling update but continues with the update of the next task.
+
+    $ docker service update \
+        --replicas 10 \
+        --image mysql:5.9  \
+        --update-delay 10s \
+        --update-failure-action pause \
+         mysql
+
+    # Rollback getback to previous config
+    $ docker service update --rollback mysql
+
+
