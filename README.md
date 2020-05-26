@@ -701,4 +701,86 @@
     # Rollback getback to previous config
     $ docker service update --rollback mysql
 
+    + networking
 
+    # create an overlay network
+    $ docker network create \
+        --driver overlay \
+        --opt encrypted \
+        overlay-network-2
+
+
+    # create a container linked to a network
+    $ docker service create \
+        --env MYSQL_ROOT_PASSWORD='mysql'\
+        --replicas 1 \
+        --network mysql-network \
+        --name mysql-2\
+        mysql
+
+    $ docker network create \
+       --subnet=10.0.0.0/16 \
+       --gateway=10.0.0.100 \
+       --ip-range=10.0.1.0/24 \
+       --driver overlay \
+       mysql-network-2
+
+    + Logging and Monitoring
+
+    - Docker includes several built-in logging drivers for containers, such as json-file, syslog,
+      journald, gelf, fluentd, and awslogs. Docker also provides the docker logs command to get the logs
+      for a container. Docker 1.13 includes an experimental feature for getting a Docker service log using
+      the docker service logs command.
+
+    - The Problem :
+    Docker Swarm mode does not include a native monitoring service for Docker services and containers.
+    Also the experimental feature to get service logs is a command-line feature and required to be run per service.
+    A logging service with which all the services’ logs and metrics could be collected and viewed in a dashboard is lacking.
+
+
+    - The Solution :
+    Sematext is an integrated data analytics platform that provides SPM performance monitoring for metrics and events collection,
+    and Logsene for log collection, including correlation between performance metrics, logs, and events. Logsene is a hosted ELK
+    (Elasticsearch, Logtash, Kibana) stack. Sematext Docker Agent is required to be installed on each Swarm node in the Swarm
+    for continuously collecting logs, metrics, and events,
+
+![](./static/sematext_nodes.png)
+
+    # Monitoring System
+    • Setting the environment
+    • Creating a SPM application
+    • Creating a Logsene application
+    • Deploying the Sematext Docker agent as a service
+    • Creating a MySQL database deployment on Docker Swarm
+    • Monitoring the Docker Swarm metrics
+    • Getting Docker Swarm logs in Logsene
+
+    - The procedure to use Sematext SPM and Logsene for logging and monitoring with a Docker Swarm is as follows.
+
+
+    - Creating a SPM Application -  Creating a Logsene Applications :
+
+    1- go login https://apps.sematext.com/ui/login
+    2- create app - monitoring
+    3- choose docker -> name it `docker-swarm-spm`
+    4- logs name  -> `docker-swarm-logs`
+    4- next, go swarm
+
+    -> now we have created SPM docker app with logsene logs collector
+
+    - Deploying the Sematext Docker Agent as a Service
+
+    $ docker service create --mode global --name st-logagent \
+      --restart-condition any \
+      --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
+      -e LOGS_TOKEN=9f1f7049-e02e-442e-904b-54fdddc8d479 \
+      -e REGION=EU \
+      sematext/logagent:latest
+
+    $ docker service create \
+        --env MYSQL_ROOT_PASSWORD='mysql'\
+        --replicas 5 \
+        --name mysql \
+         mysql
+
+    - tool used is sematext.
